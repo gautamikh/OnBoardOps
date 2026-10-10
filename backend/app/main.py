@@ -1,4 +1,12 @@
-from fastapi import FastAPI
+import logging
+
+import psycopg
+from fastapi import FastAPI, HTTPException
+
+from app.database import get_connection
+
+
+logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI(
     title="OnboardOps API",
@@ -10,3 +18,21 @@ app = FastAPI(
 @app.get("/health")
 def health_check():
     return {"status": "ok", "service": "onboardops-api"}
+
+
+@app.get("/ready")
+def readiness_check():
+    try:
+        with get_connection() as connection:
+            connection.execute("SELECT 1").fetchone()
+    except psycopg.Error as exc:
+        logger.warning(
+            "Database readiness check failed: %s",
+            type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Database unavailable",
+        ) from exc
+
+    return {"status": "ready", "database": "connected"}
