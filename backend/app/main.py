@@ -2,7 +2,7 @@ import logging
 
 import psycopg
 from fastapi import FastAPI, HTTPException
-
+from app.onboarding import router as onboarding_router
 from app.database import get_connection
 
 
@@ -13,6 +13,9 @@ app = FastAPI(
     description="AI-assisted employee onboarding",
     version="0.1.0",
 )
+
+
+app.include_router(onboarding_router)
 
 
 @app.get("/health")
