@@ -1,0 +1,12 @@
+FROM onboardops-api:dev
+
+USER root
+
+COPY requirements-test.txt .
+RUN pip install --no-cache-dir -r requirements-test.txt
+
+COPY tests/ ./tests/
+
+USER appuser
+
+CMD ["python", "-m", "pytest", "tests", "-v", "-p", "no:cacheprovider"]
