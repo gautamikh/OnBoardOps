@@ -1,0 +1,33 @@
+services:
+  db-test:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: onboardops_test
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: disposable_test_password
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - ./database/001_onboarding_requests.sql:/docker-entrypoint-initdb.d/001_requests.sql:ro
+      - ./database/002_onboarding_plans.sql:/docker-entrypoint-initdb.d/002_plans.sql:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -h 127.0.0.1 -U test_user -d onboardops_test
+      interval: 2s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  tests:
+    image: onboardops-tests:dev
+    environment:
+      RUN_INTEGRATION_TESTS: "1"
+      DB_HOST: db-test
+      DB_PORT: "5432"
+      DB_NAME: onboardops_test
+      DB_USER: test_user
+      DB_PASSWORD: disposable_test_password
+    depends_on:
+      db-test:
+        condition: service_healthy
