@@ -4,6 +4,7 @@ import psycopg
 from fastapi import FastAPI, HTTPException
 from app.onboarding import router as onboarding_router
 from app.database import get_connection
+from app.planning import router as planning_router
 
 
 logger = logging.getLogger("uvicorn.error")
@@ -16,7 +17,7 @@ app = FastAPI(
 
 
 app.include_router(onboarding_router)
-
+app.include_router(planning_router)
 
 @app.get("/health")
 def health_check():
