@@ -4,7 +4,7 @@
 
 Turn onboarding requests into structured task plans across HR, IT, and hiring managers.
 
-Built step by step with **Python · FastAPI · LangGraph · PostgreSQL · pgvector · Docker**.
+**Python · FastAPI · LangGraph · PostgreSQL · pgvector · Docker**.
 
 ---
 
@@ -85,7 +85,24 @@ These commands assume the example database name and username: `onboardops`.
 The pgvector initialization script runs automatically when the database
 volume is first created.
 
-### 5. Explore the API
+### 5. Apply the saved-plans schema
+
+```powershell
+docker compose cp database/002_onboarding_plans.sql db:/tmp/002_onboarding_plans.sql
+docker compose exec db psql -U onboardops -d onboardops -v ON_ERROR_STOP=1 -f /tmp/002_onboarding_plans.sql
+```
+
+### 6. 🧠 Initialize workflow checkpoint storage
+
+```powershell
+docker compose exec api python -m app.checkpoints
+```
+
+This prepares PostgreSQL tables for persistent LangGraph workflows.
+Connecting the workflow to these checkpoints and adding approval pauses
+are upcoming steps.
+
+### 7. Explore the API
 
 - 📖 Interactive documentation: http://localhost:8000/docs
 - 💚 API health: http://localhost:8000/health
