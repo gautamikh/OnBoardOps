@@ -133,3 +133,63 @@ def test_concurrent_generation_creates_one_plan(client, request_id):
         ).fetchone()[0]
 
     assert count == 1
+
+
+def test_saved_plan_approval_and_retry(client, request_id):
+    from app.checkpoints import setup_checkpoints
+
+    setup_checkpoints()
+
+    created = client.post(
+        f"/onboarding-requests/{request_id}/plan"
+    )
+    assert created.status_code == 201
+    plan_id = created.json()["id"]
+
+    review_url = f"/plans/{plan_id}/review"
+    decision_url = f"/plans/{plan_id}/decision"
+
+    started = client.post(review_url)
+    assert started.status_code == 200, started.text
+    assert started.json()["waiting_for_approval"] is True
+
+    # A second API call loads the checkpoint using a new connection.
+    repeated_review = client.post(review_url)
+    assert repeated_review.status_code == 200
+    assert repeated_review.json()["workflow_status"] == "awaiting_approval"
+
+    approved = client.post(decision_url, json={"decision": "approve"})
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["plan"]["status"] == "approved"
+    assert approved.json()["waiting_for_approval"] is False
+
+    repeated = client.post(decision_url, json={"decision": "approve"})
+    assert repeated.status_code == 200
+    assert repeated.json() == approved.json()
+
+    conflicting = client.post(decision_url, json={"decision": "reject"})
+    assert conflicting.status_code == 409
+
+    saved = client.get(f"/onboarding-requests/{request_id}/plan")
+    assert saved.json()["status"] == "approved"
+
+
+def test_decision_requires_started_review(client, request_id):
+    from app.checkpoints import setup_checkpoints
+
+    setup_checkpoints()
+
+    created = client.post(
+        f"/onboarding-requests/{request_id}/plan"
+    )
+    assert created.status_code == 201
+    plan_id = created.json()["id"]
+
+    response = client.post(
+        f"/plans/{plan_id}/decision",
+        json={"decision": "approve"},
+    )
+    assert response.status_code == 409
+
+    saved = client.get(f"/onboarding-requests/{request_id}/plan")
+    assert saved.json()["status"] == "draft"

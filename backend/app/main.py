@@ -6,7 +6,7 @@ from app.onboarding import router as onboarding_router
 from app.database import get_connection
 from app.planning import router as planning_router
 from app.saved_plans import router as saved_plans_router
-
+from app.reviews import router as reviews_router
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -20,6 +20,7 @@ app = FastAPI(
 app.include_router(onboarding_router)
 app.include_router(planning_router)
 app.include_router(saved_plans_router)
+app.include_router(reviews_router)
 @app.get("/health")
 def health_check():
     return {"status": "ok", "service": "onboardops-api"}
