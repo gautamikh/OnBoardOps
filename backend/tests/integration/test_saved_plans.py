@@ -193,3 +193,147 @@ def test_decision_requires_started_review(client, request_id):
 
     saved = client.get(f"/onboarding-requests/{request_id}/plan")
     assert saved.json()["status"] == "draft"
+
+
+
+@pytest.fixture
+def pending_plan(client, request_id):
+    from app.checkpoints import setup_checkpoints
+
+    setup_checkpoints()
+
+    created = client.post(
+        f"/onboarding-requests/{request_id}/plan"
+    )
+    assert created.status_code == 201, created.text
+
+    plan_id = created.json()["id"]
+
+    started = client.post(f"/plans/{plan_id}/review")
+    assert started.status_code == 200, started.text
+    assert started.json()["waiting_for_approval"] is True
+
+    return plan_id
+
+
+def test_concurrent_opposite_decisions(client, request_id, pending_plan):
+    barrier = Barrier(2)
+    decision_url = f"/plans/{pending_plan}/decision"
+
+    def submit(decision):
+        with TestClient(app) as separate_client:
+            barrier.wait(timeout=10)
+            return separate_client.post(
+                decision_url,
+                json={"decision": decision},
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        approve_future = executor.submit(submit, "approve")
+        reject_future = executor.submit(submit, "reject")
+
+        responses = [
+            approve_future.result(timeout=30),
+            reject_future.result(timeout=30),
+        ]
+
+    assert sorted(r.status_code for r in responses) == [200, 409], [
+        (r.status_code, r.text) for r in responses
+    ]
+
+    winner = next(r for r in responses if r.status_code == 200)
+    final_status = winner.json()["plan"]["status"]
+
+    assert final_status in ("approved", "rejected")
+
+    saved = client.get(
+        f"/onboarding-requests/{request_id}/plan"
+    )
+    assert saved.status_code == 200
+    assert saved.json()["status"] == final_status
+
+    review = client.post(f"/plans/{pending_plan}/review")
+    assert review.status_code == 200
+    assert review.json()["workflow_status"] == final_status
+    assert review.json()["waiting_for_approval"] is False
+
+
+
+def test_retry_repairs_interrupted_plan_update(
+    client,
+    request_id,
+    pending_plan,
+    monkeypatch,
+):
+    from contextlib import contextmanager
+
+    import psycopg
+
+    import app.reviews as reviews
+    from app.approval_workflow import build_review_graph
+
+    real_get_checkpointer = reviews.get_checkpointer
+
+    @contextmanager
+    def fail_before_plan_commit():
+        with real_get_checkpointer() as checkpointer:
+            yield checkpointer
+
+            # The graph has saved its decision, but the surrounding
+            # plan transaction has not committed yet.
+            raise psycopg.OperationalError(
+                "Simulated interruption before plan commit"
+            )
+
+    decision_url = f"/plans/{pending_plan}/decision"
+
+    # Inject the failure only for this one API call.
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            reviews,
+            "get_checkpointer",
+            fail_before_plan_commit,
+        )
+
+        failed = client.post(
+            decision_url,
+            json={"decision": "approve"},
+        )
+
+    assert failed.status_code == 503, failed.text
+
+    # The failed transaction should have rolled back the plan update.
+    saved = client.get(
+        f"/onboarding-requests/{request_id}/plan"
+    )
+    assert saved.status_code == 200
+    assert saved.json()["status"] == "draft"
+
+    # The checkpoint should still contain the completed approval.
+    config = {
+        "configurable": {
+            "thread_id": f"plan-review:{pending_plan}"
+        }
+    }
+
+    with real_get_checkpointer() as checkpointer:
+        graph = build_review_graph(checkpointer)
+        snapshot = graph.get_state(config)
+
+    assert snapshot.values["status"] == "approved"
+    assert not snapshot.interrupts
+
+    # A retry should repair the plan record using the saved decision.
+    recovered = client.post(
+        decision_url,
+        json={"decision": "approve"},
+    )
+
+    assert recovered.status_code == 200, recovered.text
+    assert recovered.json()["plan"]["status"] == "approved"
+    assert recovered.json()["waiting_for_approval"] is False
+
+    saved_after_retry = client.get(
+        f"/onboarding-requests/{request_id}/plan"
+    )
+    assert saved_after_retry.json()["status"] == "approved"
