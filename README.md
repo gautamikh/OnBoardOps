@@ -2,48 +2,63 @@
 
 ### An AI-assisted employee onboarding coordinator
 
-Turn onboarding requests into structured task plans across HR, IT, and hiring managers.
+Turn onboarding requests into draft task plans across HR, IT, and hiring managers, then review those plans through a persistent approval workflow.
 
-**Python · FastAPI · LangGraph · PostgreSQL · pgvector · Docker**.
+**Python · FastAPI · LangGraph · MCP · PostgreSQL · pgvector · Docker**
 
 ---
 
 ## 🎯 Project objective
 
-Build an internal application that retrieves relevant company policies,
-drafts onboarding plans, requests human approval, and executes approved
-tasks through MCP integrations.
+Build an internal application that retrieves company policies, drafts grounded onboarding plans, requests human approval, and executes approved tasks through MCP integrations.
 
-The current implementation supports request storage and a rule-based
-LangGraph plan preview. AI generation, policy retrieval, and task execution
-are upcoming milestones.
+The current application uses fictional employee data and deterministic planning rules. LLM generation, policy retrieval, and task execution are future milestones.
 
+## ✨ Implemented features
+
+- Create, validate, and retrieve onboarding requests.
+- Generate and persist one draft plan per request; repeated generation returns the existing plan.
+- Pause reviews with LangGraph interrupts and resume using PostgreSQL checkpoints.
+- Approve or reject saved plans; repeated matching decisions are safe and conflicting final decisions return HTTP 409.
+- Recover the saved plan status on retry if the checkpoint decision was saved before an interrupted plan update.
+- Discover and call a read-only MCP employee lookup tool in a separate Docker container.
+- Generate employee-based previews through a LangGraph node that calls MCP.
+- Check API health and database readiness.
+- Run unit and isolated PostgreSQL integration tests.
 
 ## 🧰 Technology stack
 
-| Technology | Purpose |
+| Technology | Current role |
 |---|---|
-| Python & FastAPI | Backend APIs and validation |
-| PostgreSQL | Persistent application records |
-| pgvector | Foundation for policy embeddings and vector search |
-| LangGraph | Onboarding workflow orchestration |
-| Docker Compose | Local services, networking, and storage |
-| pytest & HTTPX | Automated testing |
-| MCP — planned | Tool-based integrations |
-| React & TypeScript — planned | Request and approval interface |
+| Python & FastAPI | APIs, input validation, and application logic |
+| LangGraph | Planning and persistent approval workflows |
+| MCP Python SDK | Employee lookup server and Python client |
+| PostgreSQL | Requests, saved plans, and workflow checkpoints |
+| pgvector | Installed extension; embedding ingestion and search are planned |
+| Docker Compose | API, database, and MCP service orchestration |
+| pytest & HTTPX | API, workflow, and database integration tests |
+| React & TypeScript | Planned review interface |
 
-## 🔄 Current workflow
+## 🔄 Current workflows
 
 ```text
-Submit details → Validate → Save request → Retrieve by ID
+Saved-plan flow
+Request → Validate → Save → Generate saved plan → Start review
+                                                    ↓
+                                        Pause in PostgreSQL
+                                                    ↓
+                                         Approve or reject
 
-Preview details → LangGraph validation → Draft task plan
+Employee preview flow
+Employee ID + job title + start date
+    → LangGraph → MCP lookup → Validate employee details → Draft preview
 ```
 
-Plan previews currently run separately from saved requests. They use
-fictional rules and do not save or execute tasks.
+Previews are not saved automatically. Saved plans and MCP-based previews are currently separate paths. Plans use demonstration rules and calendar-day offsets; no onboarding tasks are executed.
 
 ## 🏁 Run locally
+
+Prerequisites: Git and Docker Desktop running Linux containers. The commands below use PowerShell from the project root.
 
 ### 1. Clone the repository
 
@@ -54,59 +69,66 @@ cd OnBoardOps
 
 ### 2. Configure the environment
 
-Copy the example configuration:
+On first setup:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Set your local database password in `.env`. Keep this file out of Git.
+Set your local database password in `.env`. Do not commit this file or overwrite an existing configuration unnecessarily. Database credentials initialize a new volume; changing `.env` later does not change an existing database password.
 
-### 3. Start the services
+### 3. Build and start services
 
-With Docker Desktop running:
+The API and MCP service share an image, so build it before starting services:
 
 ```powershell
-docker compose up --build -d
+docker compose build api
+docker compose up -d
 docker compose ps
 ```
 
-Wait for the database service to become healthy.
+Wait for `db` to become healthy and check that `api` and `mcp-tools` are running. Inspect MCP startup with:
 
-### 4. Apply the request table schema
+```powershell
+docker compose logs mcp-tools
+```
+
+The API connects to PostgreSQL at `db:5432` and MCP at `http://mcp-tools:8001/mcp` on the Compose network. Only the API is published to the host, at `127.0.0.1:8000`.
+
+### 4. Apply the database schemas
+
+Run in this order:
 
 ```powershell
 docker compose cp database/001_onboarding_requests.sql db:/tmp/001_onboarding_requests.sql
 docker compose exec db psql -U onboardops -d onboardops -v ON_ERROR_STOP=1 -f /tmp/001_onboarding_requests.sql
-```
-
-These commands assume the example database name and username: `onboardops`.
-
-The pgvector initialization script runs automatically when the database
-volume is first created.
-
-### 5. Apply the saved-plans schema
-
-```powershell
 docker compose cp database/002_onboarding_plans.sql db:/tmp/002_onboarding_plans.sql
 docker compose exec db psql -U onboardops -d onboardops -v ON_ERROR_STOP=1 -f /tmp/002_onboarding_plans.sql
 ```
 
-### 6. 🧠 Initialize workflow checkpoint storage
+These commands assume the example database name and username, `onboardops`. Adjust them if your configuration differs. The pgvector initialization script runs automatically only when the database data directory is first initialized.
+
+### 5. Initialize workflow checkpoints
 
 ```powershell
 docker compose exec api python -m app.checkpoints
 ```
 
-This prepares PostgreSQL tables for persistent LangGraph workflows.
-Connecting the workflow to these checkpoints and adding approval pauses
-are upcoming steps.
+Expected message: `LangGraph checkpoint storage is ready.` This command can be rerun. Approval workflows use these tables to retain state across process and container restarts.
 
-### 7. Explore the API
+### 6. Verify MCP connectivity
 
-- 📖 Interactive documentation: http://localhost:8000/docs
-- 💚 API health: http://localhost:8000/health
-- 🔌 Database readiness: http://localhost:8000/ready
+```powershell
+docker compose exec api python -m app.mcp_check
+```
+
+The check discovers `lookup_employee`, retrieves a known employee, checks an unknown ID, and verifies rejection of invalid input. Expected final message: `MCP connection checks passed.`
+
+### 7. Open the API
+
+- 📖 [Interactive API documentation](http://localhost:8000/docs)
+- 💚 [API health](http://localhost:8000/health)
+- 🔌 [Database readiness](http://localhost:8000/ready)
 
 ## 📡 API endpoints
 
@@ -114,11 +136,39 @@ are upcoming steps.
 |---|---|---|
 | GET | `/health` | Check API availability |
 | GET | `/ready` | Check database connectivity |
-| POST | `/onboarding-requests` | Create an onboarding request |
-| GET | `/onboarding-requests/{request_id}` | Retrieve a saved request |
-| POST | `/plans/preview` | Generate a draft task plan |
+| POST | `/onboarding-requests` | Create a request |
+| GET | `/onboarding-requests/{request_id}` | Retrieve a request |
+| POST | `/onboarding-requests/{request_id}/plan` | Generate or return the saved plan |
+| GET | `/onboarding-requests/{request_id}/plan` | Retrieve the saved plan |
+| POST | `/plans/preview` | Preview a plan from complete details |
+| POST | `/plans/from-employee` | Preview a plan using MCP employee lookup |
+| POST | `/plans/{plan_id}/review` | Start or recover a review |
+| POST | `/plans/{plan_id}/decision` | Approve or reject a reviewed plan |
 
-### Example request
+### 👤 Preview from an employee ID
+
+Submit to `POST /plans/from-employee`:
+
+```json
+{
+  "employee_id": "EMP-001",
+  "job_title": "Backend Engineer",
+  "start_date": "2026-11-02"
+}
+```
+
+The fictional directory contains `EMP-001` (Maya Example) and `EMP-002` (Alex Example). An unknown employee returns 404; a directory failure returns 503. The response includes employee details and three draft tasks.
+
+### ✅ Create and approve a saved plan
+
+1. In `/docs`, execute `POST /onboarding-requests` with the example below.
+2. Copy the response `id` as the **request ID**.
+3. Execute `POST /onboarding-requests/{request_id}/plan` with that request ID.
+4. Copy the plan response `id` as the **plan ID**.
+5. Execute `POST /plans/{plan_id}/review` with the plan ID.
+6. Expect `workflow_status: awaiting_approval` and `waiting_for_approval: true`.
+7. Execute `POST /plans/{plan_id}/decision` with `{"decision": "approve"}` or `{"decision": "reject"}`.
+8. Retrieve the saved plan using the **request ID** to verify its final status.
 
 ```json
 {
@@ -130,43 +180,75 @@ are upcoming steps.
 }
 ```
 
-Use fictional employee information while developing.
+The first plan-generation call returns 201; repeated calls return 200 with the same plan. While review is pending, the saved plan remains `draft`. Repeating a final decision returns 200; submitting the opposite decision returns 409. Approval does not execute tasks.
 
 ## 🧪 Run tests
 
-Build the latest application image, then build and run the test image:
+### Build test images
 
 ```powershell
 docker compose build api
 docker build -f backend/Dockerfile.test -t onboardops-tests:dev ./backend
+```
+
+### Unit and workflow tests
+
+```powershell
 docker run --rm onboardops-tests:dev
 ```
 
-Tests cover input validation, API responses, simulated database failures,
-and workflow behaviour. Database access is mocked in the API tests;
-this suite does not verify real SQL execution or persistence.
+Database integration tests are skipped in this mode. API database access and employee lookup are mocked where required.
+
+### Full suite with isolated PostgreSQL
+
+```powershell
+docker compose -p onboardops-integration -f compose.test.yaml up --abort-on-container-exit --exit-code-from tests
+docker compose -p onboardops-integration -f compose.test.yaml logs tests
+```
+
+The test project initializes a separate temporary database and does not use the development volume. Coverage includes saved plans, duplicate prevention, approval retries, conflicting concurrent decisions, and recovery from an injected failure before the plan update commits.
+
+After inspecting the summary, clean up:
+
+```powershell
+docker compose -p onboardops-integration -f compose.test.yaml down
+```
+
+`Aborting on container exit...` is expected when tests finish. Check the pytest summary and test container exit code. These tests do not replace the live MCP connection check above or a manual container-restart persistence check.
 
 ## 🐳 Useful Docker commands
 
-View logs:
-
 ```powershell
+# View service status and logs
+docker compose ps
 docker compose logs api
 docker compose logs db
-```
+docker compose logs mcp-tools
 
-Stop services while preserving database data:
+# Restart the API to check that pending reviews survive
+docker compose restart api
 
-```powershell
+# Simulate and recover from an MCP outage
+docker compose stop mcp-tools
+docker compose start mcp-tools
+
+# Stop development services while retaining database data
 docker compose down
 ```
 
-Avoid adding `-v` unless you intend to delete the database volume.
+Adding `-v` to the development `down` command deletes the named database volume. Keep it out of normal shutdown commands.
 
+## 🗺️ Next milestones
 
+- [ ] Connect employee-based planning to persistent requests and plans
+- [ ] Add authenticated reviewers, permissions, and an approval audit trail
+- [ ] Add plan revisions and explicit review of changed content
+- [ ] Ingest policies, generate embeddings, and retrieve sources with pgvector
+- [ ] Add LLM-generated, policy-grounded plans and quality evaluations
+- [ ] Execute approved tasks through MCP with duplicate prevention
+- [ ] Build the React review interface
+- [ ] Pin dependencies and add CI/CD, deployment, and operational monitoring
 
 ## 📌 Project status
 
-Under active development as a hands-on engineering portfolio project.
-The application is a local prototype and does not yet enforce user
-authentication or execute real onboarding actions.
+An actively developed local portfolio prototype using fictional employee data. Authentication and reviewer authorization are not implemented. Approval decisions are persisted, but real onboarding actions are not executed. No LLM or embedding API is required for the current workflows.
