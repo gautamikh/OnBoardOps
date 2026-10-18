@@ -12,6 +12,7 @@ services:
       DB_NAME: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
       DB_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
       DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      MCP_SERVER_URL: http://mcp-tools:8001/mcp
     depends_on:
       db:
         condition: service_healthy
@@ -31,6 +32,8 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
-
+  mcp-tools:
+    image: onboardops-api:dev
+    command: ["python", "-m", "app.mcp_server"]
 volumes:
   postgres_data:
