@@ -1,0 +1,27 @@
+:root {
+  font-family: Inter, "Segoe UI", system-ui, sans-serif;
+  color: #182b3a;
+  background: #f4f7fa;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button,
+input {
+  outline-offset: 4px;
+}
