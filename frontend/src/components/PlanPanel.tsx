@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import { generatePlan, getPlan } from '../api'
 import type { SavedPlan } from '../api'
+import ReviewControls from './ReviewControls'
 
 type PlanPanelProps = {
   requestId: string
@@ -11,9 +12,10 @@ export default function PlanPanel({ requestId }: PlanPanelProps) {
   const [plan, setPlan] = useState<SavedPlan | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [reviewBusy, setReviewBusy] = useState(false)
 
   async function handleLoadPlan() {
-    if (loading) return
+    if (loading || reviewBusy) return
 
     setLoading(true)
     setError('')
@@ -54,7 +56,7 @@ export default function PlanPanel({ requestId }: PlanPanelProps) {
       <button
         type="button"
         onClick={handleLoadPlan}
-        disabled={loading}
+        disabled={loading || reviewBusy}
       >
         {loading
           ? 'Loading plan…'
@@ -117,6 +119,13 @@ export default function PlanPanel({ requestId }: PlanPanelProps) {
           <p className="hint">
             This plan uses demonstration rules. Dates are calendar dates.
           </p>
+          <ReviewControls
+            key={plan.id}
+            plan={plan}
+            disabled={loading}
+            onPlanUpdated={setPlan}
+            onBusyChange={setReviewBusy}
+          />
         </>
       )}
     </section>

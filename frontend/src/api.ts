@@ -86,3 +86,58 @@ export function generatePlan(requestId: string): Promise<SavedPlan> {
 export function getPlan(requestId: string): Promise<SavedPlan> {
   return requestPlan(requestId, 'GET')
 }
+
+export type ReviewDecision = 'approve' | 'reject'
+
+export type PlanReview = {
+  plan: SavedPlan
+  workflow_status: 'awaiting_approval' | 'approved' | 'rejected'
+  waiting_for_approval: boolean
+}
+
+async function sendReviewRequest(
+  planId: string,
+  decision?: ReviewDecision,
+): Promise<PlanReview> {
+  const action = decision ? 'decision' : 'review'
+
+  const response = await fetch(
+    `/api/plans/${encodeURIComponent(planId)}/${action}`,
+    {
+      method: 'POST',
+      headers: decision
+        ? { 'Content-Type': 'application/json' }
+        : undefined,
+      body: decision ? JSON.stringify({ decision }) : undefined,
+    },
+  )
+
+  if (!response.ok) {
+    if (response.status === 409) {
+      throw new Error(
+        'The review state has changed. Check the review status before continuing.',
+      )
+    }
+
+    if (response.status === 404) {
+      throw new Error('This plan could not be found.')
+    }
+
+    throw new Error(
+      `Could not confirm the review result (HTTP ${response.status}). Check its status before continuing.`,
+    )
+  }
+
+  return response.json()
+}
+
+export function startPlanReview(planId: string): Promise<PlanReview> {
+  return sendReviewRequest(planId)
+}
+
+export function decidePlan(
+  planId: string,
+  decision: ReviewDecision,
+): Promise<PlanReview> {
+  return sendReviewRequest(planId, decision)
+}

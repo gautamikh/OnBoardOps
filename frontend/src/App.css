@@ -232,3 +232,45 @@ dd {
 .task-table time {
   white-space: nowrap;
 }
+
+.review-section {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid #dce5ec;
+}
+
+.review-section h3 {
+  margin-top: 0;
+}
+
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.review-actions button {
+  margin-top: 8px;
+}
+
+.review-message {
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+button.secondary-button {
+  background: #edf2f7;
+  color: #263f52;
+}
+
+button.secondary-button:hover:not(:disabled) {
+  background: #dce5ed;
+}
+
+button.reject-button {
+  background: #a52d35;
+}
+
+button.reject-button:hover:not(:disabled) {
+  background: #822129;
+}
