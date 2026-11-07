@@ -168,3 +168,67 @@ dd {
     margin-top: 40px;
   }
 }
+.plan-panel {
+  margin-top: 24px;
+}
+
+.plan-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.plan-status {
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: #edf2f7;
+  color: #344b60;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.table-scroll {
+  margin-top: 20px;
+  overflow-x: auto;
+}
+
+.table-scroll:focus-visible {
+  outline: 2px solid #178478;
+  outline-offset: 4px;
+}
+
+.task-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.task-table caption {
+  text-align: left;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.task-table th,
+.task-table td {
+  padding: 15px 12px;
+  border-bottom: 1px solid #e1e8ee;
+  vertical-align: top;
+}
+
+.task-table th {
+  background: #f5f8fa;
+  color: #536579;
+  font-size: 13px;
+}
+
+.task-table td:first-child {
+  min-width: 230px;
+}
+
+.task-table time {
+  white-space: nowrap;
+}

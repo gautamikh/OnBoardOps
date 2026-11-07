@@ -4,6 +4,7 @@ import type { FormEvent } from 'react'
 import { createOnboardingRequest } from './api'
 import type { OnboardingInput, OnboardingRequest } from './api'
 import './App.css'
+import PlanPanel from './components/PlanPanel'
 
 const fields = [
   { name: 'employee_name', label: 'Employee name', maxLength: 120 },
@@ -135,6 +136,12 @@ function App() {
           </section>
         )}
       </section>
+      {savedRequest && (
+        <PlanPanel
+          key={savedRequest.id}
+          requestId={savedRequest.id}
+        />
+      )}
     </main>
   )
 }

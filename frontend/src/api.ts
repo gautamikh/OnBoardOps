@@ -43,3 +43,46 @@ export async function createOnboardingRequest(
 
   return response.json()
 }
+export type PlanTask = {
+  title: string
+  owner_team: string
+  due_date: string
+}
+
+export type SavedPlan = {
+  id: string
+  request_id: string
+  status: 'draft' | 'approved' | 'rejected'
+  tasks: PlanTask[]
+  created_at: string
+}
+
+async function requestPlan(
+  requestId: string,
+  method: 'GET' | 'POST',
+): Promise<SavedPlan> {
+  const response = await fetch(
+    `/api/onboarding-requests/${encodeURIComponent(requestId)}/plan`,
+    { method },
+  )
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error('The request or saved plan could not be found.')
+    }
+
+    throw new Error(
+      `Could not load the plan (HTTP ${response.status}). Please try again.`,
+    )
+  }
+
+  return response.json()
+}
+
+export function generatePlan(requestId: string): Promise<SavedPlan> {
+  return requestPlan(requestId, 'POST')
+}
+
+export function getPlan(requestId: string): Promise<SavedPlan> {
+  return requestPlan(requestId, 'GET')
+}
